@@ -1,0 +1,4 @@
+# Adjust ATTRS serial/vendor/model to match your USB drive (use `udevadm info --attribute-walk`).
+ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="sd?", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect /dev/%k /mnt/flash"
+ACTION=="remove", SUBSYSTEMS=="usb", KERNEL=="sd?", RUN+="/usr/bin/systemd-umount --no-block /mnt/flash"
+

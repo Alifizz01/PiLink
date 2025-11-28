@@ -1,0 +1,7 @@
+textual==0.41.0
+rich==13.7.1
+pyyaml==6.0.2
+watchdog==4.0.1
+paramiko==3.4.0
+python-dotenv==1.0.1
+

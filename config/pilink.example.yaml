@@ -1,0 +1,46 @@
+# Copy this file to /etc/pilink.yaml and adjust values for your setup.
+
+ui:
+  theme: "blue"
+  log_lines: 200
+
+paths:
+  staging_root: "/data"
+  pc_inbox: "/data/pc_inbox"
+  flash_outbox: "/data/flash_outbox"
+  log_dir: "/data/logs"
+  flash_mount: "/mnt/flash"
+  flash_transfer_root: "/mnt/flash/transfers"
+  retention_days: 7
+
+flash_drive:
+  min_required_gb: 8
+
+pc_endpoints:
+  - name: "default_pc"
+    host: "192.168.50.1"
+    port: 21
+    username: "pilink"
+    password: "change-me"
+    download_root: "/computer_share"   # remote path pulled to the Pi
+    upload_root: "/uploads"            # remote path where Pi pushes data
+
+pi_ftp:
+  host: "0.0.0.0"
+  port: 21
+  username: "piuser"
+  password: "change-me"
+  root: "/data/pi_ftp_root"
+
+usb_watcher:
+  enabled: true
+  debounce_seconds: 5
+
+logging:
+  level: "INFO"
+  log_file: "/var/log/pilink.log"
+
+alerts:
+  enable_sound: false
+  enable_gpio_led: false
+

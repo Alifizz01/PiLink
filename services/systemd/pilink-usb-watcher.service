@@ -1,0 +1,18 @@
+[Unit]
+Description=PiLink USB Flash Mirror
+After=multi-user.target
+Wants=pilink-ui.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/pilink
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m pilink.services.usb_watcher --config /etc/pilink.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
