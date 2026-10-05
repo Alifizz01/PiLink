@@ -144,3 +144,8 @@ def test_config_errors_name_the_key(tmp_path):
 def test_the_2025_example_config_still_loads():
     cfg = load_config(os.path.join(os.path.dirname(__file__), "legacy_config_2025.yaml"))
     assert cfg.default_endpoint.host == "192.168.50.1"
+
+
+def test_dropped_connection_is_explained():
+    from pilink.ftp_client import explain
+    assert "closed the connection" in str(explain(EOFError(), "192.168.50.1", 21))

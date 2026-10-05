@@ -36,6 +36,9 @@ def explain(exc: BaseException, host: str, port: int) -> PiLinkError:
     where = f"{host}:{port}"
     if isinstance(exc, PiLinkError):
         return exc
+    if isinstance(exc, EOFError):
+        return PiLinkError(f"The PC at {where} closed the connection. FileZilla Server may have been "
+                           "stopped, or it disconnected the Pi (check its log for the reason).")
     if isinstance(exc, ConnectionRefusedError):
         return PiLinkError(f"The PC at {where} refused the connection. Is FileZilla Server running, "
                            f"and listening on port {port}?")
@@ -176,6 +179,8 @@ class FTPClient:
             except ftplib.error_perm as exc:
                 if not str(exc).startswith("550"):     # 550: already there
                     raise explain(exc, self.host, self.port) from exc
+            except Exception as exc:
+                raise explain(exc, self.host, self.port) from exc
 
     def upload(self, pairs: list[tuple[str, str]], progress: Optional[ProgressCb] = None) -> int:
         """pairs: (local file, remote path). Creates remote folders as needed."""

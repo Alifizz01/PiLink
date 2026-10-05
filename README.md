@@ -96,8 +96,8 @@ Everything is also a command, for SSH or scripts: `pilink status`, `pilink pc-to
 - **Checked at every step:** the stick must really be mounted (otherwise files would land on the SD card),
   free space is checked against the real total, sizes are checked against the server's listing, hashes
   are compared after reading the stick back, uploads are confirmed with `SIZE`.
-- **17 tests** run both workflows end to end against a **real FTP server** (pyftpdlib) and cover the
-  failure cases: wrong password, unreachable PC, no stick, full stick, a byte corrupted on the stick,
+- **18 tests** run both workflows end to end against a **real FTP server** (pyftpdlib) and cover the
+  failure cases: wrong password, unreachable PC, a dropped connection, no stick, full stick, a byte corrupted on the stick,
   cancel, bad config, desktop automount. One test drives the **real UI headless with key presses**.
   CI runs them on Python 3.9, 3.11 (Bookworm's) and 3.12.
 

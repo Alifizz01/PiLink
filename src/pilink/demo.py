@@ -48,7 +48,7 @@ def prepare(base: str | None = None, port: int = 0):
     try:
         from pyftpdlib.authorizers import DummyAuthorizer
         from pyftpdlib.handlers import FTPHandler
-        from pyftpdlib.servers import ThreadedFTPServer
+        from pyftpdlib.servers import FTPServer
     except ImportError:
         raise SystemExit("The demo needs pyftpdlib:  pip install \"pilink[demo]\"   (or: pip install pyftpdlib)")
     root = pathlib.Path(base or os.path.join(tempfile.gettempdir(), "pilink-demo")).resolve()
@@ -64,7 +64,7 @@ def prepare(base: str | None = None, port: int = 0):
     auth = DummyAuthorizer()
     auth.add_user("pilink", "demo", str(pc), perm="elradfmwMT")
     handler = type("DemoHandler", (FTPHandler,), {"authorizer": auth, "banner": "PiLink demo PC"})
-    server = ThreadedFTPServer(("127.0.0.1", port), handler)
+    server = FTPServer(("127.0.0.1", port), handler)
     port = server.socket.getsockname()[1]
     threading.Thread(target=server.serve_forever, kwargs={"timeout": 0.2}, daemon=True).start()
 
