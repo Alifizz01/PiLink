@@ -1,6 +1,9 @@
 <div align="center">
 
-# PiLink
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo/logo-dark.svg">
+  <img src="docs/logo/logo.svg" alt="PiLink" width="320">
+</picture>
 
 **Turn a Raspberry Pi into a transfer box between a Windows PC and a USB flash drive, where every copy is verified before it says "done".**
 
