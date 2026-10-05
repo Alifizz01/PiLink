@@ -1,16 +1,18 @@
+"""Local files: hashing, copying with progress, space checks, staging cleanup."""
 from __future__ import annotations
 
 import hashlib
 import os
 import pathlib
 import shutil
-from typing import Iterable
-
 import time
+from typing import Callable, Iterable, Optional
 
 from .logging_utils import get_logger
 
 logger = get_logger(__name__)
+ProgressCb = Callable[[int, int, str], None]
+CHUNK = 1024 * 1024
 
 
 def ensure_dirs(*paths: str) -> None:
@@ -18,60 +20,92 @@ def ensure_dirs(*paths: str) -> None:
         pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def copytree(src: str, dst: str) -> None:
-    logger.info("Copying %s -> %s", src, dst)
-    if os.path.exists(dst):
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst)
-
-
-def copy_path(src: str, dst: str) -> None:
-    if os.path.isdir(src):
-        copytree(src, dst)
-    else:
-        ensure_dirs(os.path.dirname(dst))
-        logger.info("Copying file %s -> %s", src, dst)
-        shutil.copy2(src, dst)
-
-
-def available_gb(path: str) -> float:
-    stats = shutil.disk_usage(path)
-    return stats.free / (1024 ** 3)
-
-
-def checksum_path(path: str, algorithm: str = "sha256") -> str:
-    path = os.path.abspath(path)
-    hash_obj = hashlib.new(algorithm)
+def sha256(path: str) -> str:
+    h = hashlib.sha256()
     with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            hash_obj.update(chunk)
-    return hash_obj.hexdigest()
+        for chunk in iter(lambda: fh.read(CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
-def write_checksum_manifest(source_dir: str, manifest_path: str) -> None:
-    entries: list[str] = []
-    for root, _, files in os.walk(source_dir):
-        for file_name in files:
-            file_path = os.path.join(root, file_name)
-            digest = checksum_path(file_path)
-            rel = os.path.relpath(file_path, source_dir)
-            entries.append(f"{digest}  {rel}")
-    entries.sort()
-    pathlib.Path(manifest_path).write_text("\n".join(entries), encoding="utf-8")
+def list_files(root: str) -> list[tuple[str, str]]:
+    """(absolute path, relative path with '/') for every file below root, sorted."""
+    out = []
+    for base, dirs, files in os.walk(root):
+        dirs.sort()
+        for name in sorted(files):
+            full = os.path.join(base, name)
+            out.append((full, os.path.relpath(full, root).replace(os.sep, "/")))
+    return out
 
 
-def prune_old_entries(root: str, keep_days: int) -> list[str]:
-    pruned: list[str] = []
-    root_path = pathlib.Path(root)
-    if not root_path.exists():
-        return pruned
-    now = time.time()
-    for path in root_path.iterdir():
-        if not path.is_dir():
-            continue
-        mtime_days = (now - path.stat().st_mtime) / 86400
-        if mtime_days > keep_days:
-            shutil.rmtree(path)
-            pruned.append(str(path))
-    return pruned
+def hash_tree(root: str) -> dict[str, str]:
+    return {rel: sha256(full) for full, rel in list_files(root)}
 
+
+def tree_size(paths: Iterable[str]) -> int:
+    total = 0
+    for p in paths:
+        if os.path.isdir(p):
+            total += sum(os.path.getsize(f) for f, _ in list_files(p))
+        elif os.path.isfile(p):
+            total += os.path.getsize(p)
+    return total
+
+
+def copy_files(pairs: list[tuple[str, str]], progress: Optional[ProgressCb] = None) -> int:
+    """Copy (src, dst) pairs with byte progress, fsync'ing every file so that
+    'copied' means 'on the device', not 'in the page cache'."""
+    total = sum(os.path.getsize(src) for src, _ in pairs)
+    done = 0
+    for src, dst in pairs:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(src, "rb") as fin, open(dst, "wb") as fout:
+            for chunk in iter(lambda: fin.read(CHUNK), b""):
+                fout.write(chunk)
+                done += len(chunk)
+                if progress:
+                    progress(done, total, os.path.basename(dst))
+            fout.flush()
+            os.fsync(fout.fileno())
+        try:
+            shutil.copystat(src, dst)          # keep modification times; FAT may refuse some
+        except OSError:
+            pass
+    return done
+
+
+def write_manifest(hashes: dict[str, str], path: str) -> None:
+    """sha256sum-compatible: `sha256sum -c checksums.txt` works on any Linux."""
+    lines = [f"{digest}  {rel}" for rel, digest in sorted(hashes.items())]
+    pathlib.Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def free_bytes(path: str) -> int:
+    while not os.path.exists(path):          # a folder that will be created: ask its parent
+        path = os.path.dirname(path) or "/"
+    return shutil.disk_usage(path).free
+
+
+def prune(root: str, keep_days: int) -> list[str]:
+    """Delete staging folders older than keep_days. Returns what was removed."""
+    removed: list[str] = []
+    base = pathlib.Path(root)
+    if not base.exists() or keep_days < 0:
+        return removed
+    cutoff = time.time() - keep_days * 86400
+    for entry in base.iterdir():
+        if entry.is_dir() and entry.stat().st_mtime < cutoff:
+            shutil.rmtree(entry, ignore_errors=True)
+            removed.append(str(entry))
+    if removed:
+        logger.info("pruned %d staging folder(s) older than %d days from %s", len(removed), keep_days, root)
+    return removed
+
+
+def human(n: float) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(n) < 1024 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"

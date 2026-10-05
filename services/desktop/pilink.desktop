@@ -1,0 +1,10 @@
+# Installed by scripts/setup_pi.sh --mode desktop, which fills in @APP@.
+[Desktop Entry]
+Type=Application
+Name=PiLink
+GenericName=Transfer hub
+Comment=Copy files between the PC (FTP) and a USB flash drive, verified
+Exec=lxterminal --title=PiLink --geometry=110x34 -e "@APP@/.venv/bin/pilink-ui --config /etc/pilink.yaml"
+Icon=drive-removable-media
+Terminal=false
+Categories=Utility;System;

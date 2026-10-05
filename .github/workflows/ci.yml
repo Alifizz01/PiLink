@@ -1,0 +1,17 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.11", "3.12"]    # 3.11 is Raspberry Pi OS Bookworm's
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}" }
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - run: bash -n scripts/setup_pi.sh
+      - name: example config loads
+        run: python -c "from pilink.config import load_config; load_config('config/pilink.example.yaml')"

@@ -1,24 +1,31 @@
+# Installed by scripts/setup_pi.sh, which fills in @USER@ and @APP@.
 [Unit]
-Description=PiLink Blue Screen UI
-After=network-online.target
-Requires=network-online.target
+Description=PiLink transfer hub (console UI on tty1)
+# Wants, not Requires: the UI must still come up with the cable unplugged,
+# so it can say so on screen.
+Wants=network-online.target
+After=network-online.target systemd-user-sessions.service getty@tty1.service
+Conflicts=getty@tty1.service
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/opt/pilink
+User=@USER@
+Group=@USER@
+WorkingDirectory=@APP@
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m pilink.ui.app --config /etc/pilink.yaml
-Restart=on-failure
-RestartSec=5
+Environment=TERM=linux
+ExecStart=@APP@/.venv/bin/pilink-ui --config /etc/pilink.yaml
+# The UI draws on the console, so stdin and stdout must be the TTY itself.
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
-StandardInput=tty
-StandardOutput=journal
-StandardError=journal
+TTYVTDisallocate=yes
+# Quitting with Q, or a crash, brings the UI straight back.
+Restart=always
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
-

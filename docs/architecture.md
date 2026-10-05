@@ -1,88 +1,66 @@
-Architecture Overview
-=====================
+# How PiLink works
 
-Goals
------
-
-* Provide an appliance-like experience: when the Pi boots, a BIOS-style UI becomes the default shell.
-* Offer two automated transfer flows with zero manual file management.
-* Keep the PC ↔ Pi link isolated and deterministic by using a direct Ethernet cable with static IPs.
-* Mirror everything onto a USB flash drive that attaches to the Pi and auto-mounts.
-
-Key components
---------------
-
-### Networking
-
-* Dedicated Ethernet cable between Windows PC and Raspberry Pi.
-* Static IP scheme (example): `PC 192.168.50.1/24`, `Pi 192.168.50.2/24`.
-* Optional DHCP server on the Pi if you want the PC to obtain settings automatically.
-* Firewall rules on both sides restrict FTP traffic to the dedicated NIC.
-
-### FTP services
-
-* **On Pi**: `vsftpd` accepts inbound FTP transfers should you ever need to push from the PC manually.
-* **On PC**: FileZilla Server (or another FTP daemon) exposes a controlled directory so the Pi can pull or push without interaction.
-* Credentials and directory mappings live in `/etc/pilink.yaml`.
-* All transfers happen via Python’s `ftplib` (in `pilink/ftp_client.py`). Optionally swap to `lftp` or `curlftpfs` if you prefer shell tooling — the orchestrator abstracts this away.
-
-### Storage layout
-
-```
-/data/
-  pc_inbox/        # Files pulled from the computer before copying to the flash drive
-  flash_outbox/    # Files staged from the flash drive before pushing to the computer
-  logs/            # Consolidated application logs
-/mnt/flash/        # USB flash drive, mounted via udev rule
+```mermaid
+flowchart LR
+  subgraph PC["Windows PC"]
+    FZ["FileZilla Server<br/>/computer_share · /uploads"]
+  end
+  subgraph Pi["Raspberry Pi"]
+    UI["pilink-ui<br/>(tty1)"] --> TM["TransferManager"]
+    CLI["pilink CLI<br/>(SSH)"] --> TM
+    TM --> FTP["FTP / FTPS client"]
+    TM --> ST["/data staging<br/>+ history.jsonl"]
+    TM --> FL["flash: mounted? space? eject"]
+  end
+  USB[("USB flash drive<br/>/mnt/flash")]
+  FTP <--> FZ
+  FL <--> USB
+  UDEV["udev rule"] -. mounts .-> USB
 ```
 
-### Software layers
+## The two workflows
 
-* `pilink.config` – loads YAML config into typed dataclasses and exposes helper accessors.
-* `pilink.ftp_client.FTPClient` – wraps Python’s `ftplib` to download/upload recursive directories with progress callbacks.
-* `pilink.storage` – handles mounting checks, disk space validation, and checksum generation.
-* `pilink.transfer_manager.TransferManager` – orchestrates the high-level flows (Computer → Flash, Flash → Computer) using the FTP client + storage helpers.
-* `pilink.services.usb_watcher.USBMirrorService` – monitors `/data/pc_inbox` for new items and mirrors them automatically to `/mnt/flash`.
-* `pilink.ui.app.PiLinkApp` – Textual-based TUI that provides the blue BIOS-style experience, status panels, logs, and action buttons.
+**Computer → Flash drive**
 
-### Services & boot flow
+1. Refuse to start unless something is really mounted at `/mnt/flash` and writable.
+   (Writing to an empty mount point would put the files on the SD card.)
+2. Connect (FTP or explicit FTPS) and list `download_root` recursively, with sizes.
+3. Check free space on the Pi and on the stick against the real total.
+4. Download into `/data/pc_inbox/<date-time>/`, byte-accurate progress.
+5. Every file's size must match what the server listed.
+6. SHA-256 every file, copy to `/mnt/flash/transfers/<date-time>/` with an `fsync` per file.
+7. Read every file back from the stick and compare its hash. Only then: success.
+8. `checksums.txt` next to the files (`sha256sum -c` compatible).
 
-1. A `systemd` service called `pilink-ui.service` auto-logs in on `tty1` and runs `python -m pilink.ui.app`.
-2. Another service `pilink-usb-watcher.service` starts after the USB storage mounts and keeps `/mnt/flash` synchronized.
-3. Logging flows to `/var/log/pilink.log` using Python’s `logging` module with rotation.
+**Flash drive → Computer**
 
-Data flow diagrams
-------------------
+1. The selection must be inside the stick; system folders (`System Volume Information`, …) are skipped.
+2. Copy to `/data/flash_outbox/<date-time>/` so the stick can be removed while uploading, and hash.
+3. Upload into `upload_root/<date-time>/` (never overwriting an earlier upload) plus `checksums.txt`.
+4. Ask the PC for every file's size (`SIZE`) and compare. A server that will not say is reported
+   as "sent", not as "verified".
 
-### Scenario 1 – Computer → Flash drive
+Both: every run, failed or not, goes into `/data/history.jsonl`; staging folders older than
+`retention_days` are deleted after a successful run; Esc cancels between blocks.
 
-1. User selects “Computer → Flash” on the UI.
-2. `TransferManager.run_pc_to_flash()`:
-   * Connect to the PC FTP server, mirror configured remote folder → `/data/pc_inbox/<timestamp>`.
-   * Validate disk space on Pi and flash drive.
-3. `USBMirrorService` copies the new folder to `/mnt/flash/transfers/<timestamp>` and computes checksums.
-4. UI displays completion status; optional cleanup removes old staging data based on retention policy.
+## Code
 
-### Scenario 2 – Flash drive → Computer
+| file | role |
+|---|---|
+| `src/pilink/config.py` | loads `/etc/pilink.yaml`; errors name the exact key; accepts the 2025 layout |
+| `src/pilink/ftp_client.py` | FTP/FTPS, recursive listing (MLSD with a LIST fallback), progress, every error turned into a sentence |
+| `src/pilink/transfer_manager.py` | the two workflows above |
+| `src/pilink/storage.py` | hashing, fsync'd copies, space, cleanup |
+| `src/pilink/flash.py` | is the stick there, its label and space, safe eject |
+| `src/pilink/history.py` | the transfer log |
+| `src/pilink/doctor.py` | the checks behind `pilink doctor` and the Diagnostics screen |
+| `src/pilink/ui/` | the Textual console UI |
+| `src/pilink/cli.py` | `pilink` command line |
+| `src/pilink/demo.py` | `pilink demo`: a local FTP server and folders standing in for the PC and the stick |
 
-1. User selects “Flash → Computer” and picks files/folders from the flash drive tree shown in the UI.
-2. `TransferManager.run_flash_to_pc()`:
-   * Copies selected items to `/data/flash_outbox/<timestamp>` (so FTP has a stable source).
-   * Pushes the folder to the PC via FTP (reverse mirror).
-3. UI streamlines status, showing throughput, ETA, and the PC target folder.
+## Tests
 
-Security considerations
------------------------
-
-* Because FTP is plaintext, keep the link physically isolated or wrap inside an SSH tunnel if the cable touches anything else.
-* Use non-guessable FTP credentials stored in `/etc/pilink.yaml` with root-only permissions.
-* The PC FTP server should only expose a staging directory and enforce IP restrictions.
-* Consider enabling FTPS in both directions if you need on-the-wire encryption; `FTPClient` is written so it can later use `ftplib.FTP_TLS`.
-
-Extensibility
--------------
-
-* Swap to SFTP by implementing `pilink/transport/base.py` and injecting a new transport into `TransferManager`.
-* Add checksum comparison screens in the UI to confirm parity before deleting staging data.
-* Connect to additional storage (NAS, cloud) by adding new menu items that call into `TransferManager`.
-
+`pytest` runs both workflows end to end against a real FTP server (pyftpdlib) on localhost,
+plus the failure cases: wrong password, unreachable PC, no stick mounted, not enough space, a
+byte corrupted on the stick, cancel, bad config. `tests/test_ui.py` drives the real UI headless
+with the keys a person would press.

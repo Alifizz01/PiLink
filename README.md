@@ -1,81 +1,115 @@
-PiLink – Raspberry Pi FTP Transfer Hub
-======================================
+<div align="center">
 
-PiLink turns a Raspberry Pi into a “blue screen” transfer appliance that sits between a Windows PC and a USB flash drive. It offers two automated workflows:
+# PiLink
 
-* Computer → Pi → Flash drive
-* Flash drive → Pi → Computer
+**Turn a Raspberry Pi into a transfer box between a Windows PC and a USB flash drive, where every copy is verified before it says "done".**
 
-Both flows rely on FTP over a dedicated Ethernet link, so once the user makes a choice on the Pi UI, files move with zero extra interaction.
+[![ci](https://github.com/Alifizz01/PiLink/actions/workflows/ci.yml/badge.svg)](https://github.com/Alifizz01/PiLink/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.9%2B-0A2A8A)
+![Raspberry Pi OS](https://img.shields.io/badge/Raspberry%20Pi%20OS-Lite%20%7C%20Desktop-C51A4A)
+![license](https://img.shields.io/badge/license-MIT-2B8A3E)
 
-Documentation
--------------
+<img src="docs/img/home.png" alt="PiLink home screen: PC connected with 7 files waiting, flash drive mounted with free space, three numbered actions" width="820">
 
-**📚 [Documentation Index](docs/INDEX.md)** - Complete guide to all documentation
-
-**Getting Started:**
-- **[USER_GUIDE.md](docs/USER_GUIDE.md)** - Complete step-by-step setup and usage guide
-- **[QUICK_START.md](docs/QUICK_START.md)** - Get running in 15 minutes
-- **[INSTALLATION_CHECKLIST.md](docs/INSTALLATION_CHECKLIST.md)** - Step-by-step verification checklist
-
-**Reference:**
-- **[architecture.md](docs/architecture.md)** - System overview and component diagrams
-- **[networking.md](docs/networking.md)** - Static IP + FTP guidance for PC <-> Pi
-- **[operations.md](docs/operations.md)** - Runbooks, recovery steps, testing recipes
-- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Common problems and solutions
-
-Project contents
-----------------
+</div>
 
 ```
-PiLink/
-├── README.md
-├── config/
-│   └── pilink.example.yaml      # Sample configuration (copy to /etc/pilink.yaml)
-├── docs/
-│   ├── USER_GUIDE.md            # Complete setup and usage instructions
-│   ├── QUICK_START.md            # Quick setup guide (15 minutes)
-│   ├── architecture.md          # System overview and component diagrams
-│   ├── networking.md            # Static IP + FTP guidance for PC <-> Pi
-│   └── operations.md            # Runbooks, recovery steps, testing recipes
-├── scripts/
-│   └── setup_pi.sh              # Bootstrap script for a fresh Pi OS Lite install
-├── services/
-│   ├── systemd/
-│   │   ├── pilink-ui.service            # boots directly into the blue-screen UI
-│   │   └── pilink-usb-watcher.service   # mirrors staged files onto the flash drive
-│   └── udev/
-│       └── 99-pilink-flash.rules        # ensures the USB drive mounts at /mnt/flash
-└── src/
-    └── pilink/
-        ├── __init__.py
-        ├── config.py
-        ├── ftp_client.py
-        ├── logging_utils.py
-        ├── storage.py
-        ├── transfer_manager.py
-        ├── ui/
-        │   ├── __init__.py
-        │   ├── app.py
-        │   └── screens.py
-        └── services/
-            └── usb_watcher.py
+ Windows PC                          Raspberry Pi                    USB flash drive
+ FileZilla Server  ── Ethernet ──    PiLink on screen + keyboard ── USB ──  the stick
 ```
 
-Quick start
------------
+## What problem it solves
 
-For detailed instructions, see [USER_GUIDE.md](docs/USER_GUIDE.md) or [QUICK_START.md](docs/QUICK_START.md).
+Some PCs must never have a USB stick plugged into them: lab and test-bench machines, shop-floor
+PCs, anything under an IT policy that blocks removable media. Files still have to move between
+those PCs and sticks. PiLink puts a Raspberry Pi in the middle. The PC only talks FTP over one
+cable; the stick only ever touches the Pi.
 
-**TL;DR:**
-1. Configure static IPs on PC (`192.168.50.1`) and Pi (`192.168.50.2`)
-2. Install FileZilla Server on PC and create FTP user
-3. Run `sudo ./scripts/setup_pi.sh` on the Pi
-4. Edit `/etc/pilink.yaml` with your FTP credentials
-5. Reboot - PiLink UI starts automatically!
+| The usual way | What goes wrong | PiLink |
+|---|---|---|
+| Plug the stick into the PC | Not allowed, or a malware/data-leak risk | The stick never touches the PC. The PC only serves files over FTP (or FTPS) on a direct cable |
+| Copy, see the progress bar finish, pull the stick | Data still in the write cache is lost; a failing stick returns different bytes | Every file is `fsync`'d to the stick, **read back and checksummed** before PiLink says done. "Safely remove" flushes and unmounts |
+| Someone has to know Linux | Errors are tracebacks | Numbered keys on a blue screen, a file picker, and **every error is a sentence that says what to check** |
+| "Did that work last Tuesday?" | Nobody knows | A history of every transfer, failed ones included, and a `checksums.txt` next to every copy |
 
-License
--------
+## Screens
 
-This repository currently ships without a license file. Add the license that best matches your deployment needs (MIT, Apache-2.0, etc.) before distributing PiLink.
+| | |
+|---|---|
+| ![Transfer in progress: step checklist, progress bar at 35 percent, current file, speed and time left](docs/img/transfer.png) | ![Transfer finished: green banner, 7 files 12.5 MB verified byte for byte](docs/img/done.png) |
+| **A transfer** shows each step, the bytes, speed and time left. Esc cancels. | **Done** only appears after every file was read back and compared. |
+| ![File picker on the flash drive with two items selected and their total size](docs/img/picker.png) | ![History table of transfers with result and size](docs/img/history.png) |
+| **Flash → Computer** lets you pick files and folders (Space), never system folders. | **History** of every transfer, including the ones that failed and why. |
 
+![Diagnostics: staging folder, log folder, flash drive, PC network and FTP login all OK](docs/img/diagnostics.png)
+
+**Diagnostics** (key 5, or `pilink doctor` over SSH) checks the folders, the stick, the cable and the FTP login, and says what to do about anything that fails.
+
+## Try it without a Pi
+
+```bash
+pip install "pilink[demo] @ git+https://github.com/Alifizz01/PiLink"
+pilink demo
+```
+
+The demo starts a local FTP server playing the PC, a folder playing the stick, and sample files on both,
+then opens the real UI. Everything stays inside one temp folder. It is also what produced every screenshot
+above ([`tools/screenshots.py`](tools/screenshots.py)).
+
+## Install on a Raspberry Pi
+
+```bash
+sudo git clone https://github.com/Alifizz01/PiLink /opt/pilink
+sudo /opt/pilink/scripts/setup_pi.sh --static-ip 192.168.50.2/24     # Lite or Desktop is detected
+sudo nano /etc/pilink.yaml                                           # the FileZilla user and folders
+pilink doctor
+```
+
+Two ways to run it, chosen with `--mode` (or detected automatically):
+
+| | **Raspberry Pi OS Lite** | **Raspberry Pi OS with desktop** |
+|---|---|---|
+| PiLink appears | full screen on the console from boot, like an appliance | in a window at login, and in *Menu → Accessories* |
+| The stick is mounted by | PiLink's udev rule, at `/mnt/flash` | the desktop, as usual; PiLink finds it (`flash_mount: "auto"`) |
+| Safely remove uses | a sudoers entry allowing only that unmount | `udisksctl`, the same as the desktop's eject button |
+
+The full walkthrough, including the FileZilla Server settings on the PC (users, folders, TLS,
+firewall), is in **[docs/SETUP.md](docs/SETUP.md)**. When something does not connect:
+**[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
+
+## Using it
+
+| key | |
+|---|---|
+| **1** | **Computer → Flash drive.** Everything in the PC's share is downloaded, written to `transfers/<date-time>/` on the stick, read back and verified, with `checksums.txt` |
+| **2** | **Flash drive → Computer.** Pick files/folders; they arrive in `uploads/<date-time>/` on the PC (never overwriting an earlier upload), every size checked on the PC |
+| **3** | **Safely remove** the stick |
+| **4** / **5** | History / Diagnostics |
+
+Everything is also a command, for SSH or scripts: `pilink status`, `pilink pc-to-flash`,
+`pilink flash-to-pc Measurements report.pdf`, `pilink eject`, `pilink history`, `pilink doctor`.
+
+## How it is built and tested
+
+- **Python + [Textual](https://textual.textualize.io)** for the console UI; standard-library `ftplib` for
+  FTP and explicit FTPS (FileZilla Server 1.x requires TLS by default).
+- **Checked at every step:** the stick must really be mounted (otherwise files would land on the SD card),
+  free space is checked against the real total, sizes are checked against the server's listing, hashes
+  are compared after reading the stick back, uploads are confirmed with `SIZE`.
+- **17 tests** run both workflows end to end against a **real FTP server** (pyftpdlib) and cover the
+  failure cases: wrong password, unreachable PC, no stick, full stick, a byte corrupted on the stick,
+  cancel, bad config, desktop automount. One test drives the **real UI headless with key presses**.
+  CI runs them on Python 3.9, 3.11 (Bookworm's) and 3.12.
+
+How the pieces fit: [docs/architecture.md](docs/architecture.md).
+
+## Upgrading from the 2025 version
+
+Rerun `setup_pi.sh`. Your `/etc/pilink.yaml` keeps working (retired sections are ignored), the
+old `pilink-usb-watcher` service is removed (it copied every transfer a second time), and the
+service now runs as your real user instead of the `pi` account that current Raspberry Pi OS no
+longer has. If FileZilla Server is 1.x, add `tls: true` to the endpoint.
+
+## License
+
+MIT · © Muhamad Alif Izzuwan Bin Ibrahim

@@ -1,0 +1,100 @@
+/* PiLink - a BIOS-setup style console UI. Navy field, grey frames, yellow keys.
+   Colours are chosen to survive the 16-colour Linux console on tty1. */
+
+Screen {
+    background: #0A2A8A;
+    color: #E6E9F2;
+}
+
+#titlebar {
+    dock: top;
+    height: 1;
+    background: #C9CDD6;
+    color: #0A2A8A;
+    text-style: bold;
+    padding: 0 1;
+}
+
+#keybar {
+    dock: bottom;
+    height: 1;
+    background: #C9CDD6;
+    color: #0A2A8A;
+    padding: 0 1;
+}
+
+.frame {
+    border: double #C9CDD6;
+    border-title-color: #FFD34D;
+    border-title-style: bold;
+    padding: 0 1;
+    margin: 0 1;
+    height: auto;
+}
+
+.row { height: 1; }
+.ok { color: #6EF08A; }
+.bad { color: #FF7A7A; }
+.warn { color: #FFD34D; }
+.dim { color: #9AA6C8; }
+.key { color: #FFD34D; text-style: bold; }
+
+/* ---------------- home ---------------- */
+#status { margin-top: 1; }
+#menu { margin-top: 1; height: auto; }
+.action {
+    height: 3;
+    padding: 0 2;
+    background: #0A2A8A;
+}
+.action:focus, .action.-hover {
+    background: #2A4FB8;
+    text-style: bold;
+}
+.action.disabled { color: #6C7BAA; }
+#last { margin-top: 1; }
+
+/* ---------------- picker ---------------- */
+#pick-body { height: 1fr; }
+#tree {
+    width: 2fr;
+    background: #0A2A8A;
+    border: double #C9CDD6;
+    border-title-color: #FFD34D;
+    margin: 0 0 0 1;
+}
+#tree > .tree--cursor { background: #2A4FB8; }
+#selection {
+    width: 1fr;
+    border: double #C9CDD6;
+    border-title-color: #FFD34D;
+    margin: 0 1;
+    padding: 0 1;
+}
+
+/* ---------------- transfer ---------------- */
+#steps { margin-top: 1; }
+/* no margin here: a top margin collapses the one-line bar to nothing */
+#bar { width: 100%; height: 1; }
+#bar Bar { width: 1fr; }
+#gap { height: 1; }
+#bar Bar > .bar--bar { color: #FFD34D; background: #233F8F; }
+#bar Bar > .bar--complete { color: #6EF08A; }
+#result {
+    margin-top: 1;
+    padding: 1 2;
+    height: auto;
+    text-style: bold;
+}
+#result.success { background: #1E7A3A; color: #FFFFFF; }
+#result.failure { background: #9C1F2B; color: #FFFFFF; }
+
+/* ---------------- tables ---------------- */
+DataTable {
+    background: #0A2A8A;
+    height: 1fr;
+    margin: 0 1;
+    border: double #C9CDD6;
+}
+DataTable > .datatable--header { background: #C9CDD6; color: #0A2A8A; text-style: bold; }
+DataTable > .datatable--cursor { background: #2A4FB8; }

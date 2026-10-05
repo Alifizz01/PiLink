@@ -1,4 +1,9 @@
-# Adjust ATTRS serial/vendor/model to match your USB drive (use `udevadm info --attribute-walk`).
-ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="sd?", RUN+="/usr/bin/systemd-mount --no-block --automount=yes --collect /dev/%k /mnt/flash"
-ACTION=="remove", SUBSYSTEMS=="usb", KERNEL=="sd?", RUN+="/usr/bin/systemd-umount --no-block /mnt/flash"
-
+# Installed by scripts/setup_pi.sh, which fills in @UID@ and @GID@.
+# Mounts the first filesystem partition of any USB stick at /mnt/flash.
+# FAT, exFAT and NTFS have no owners, so they are mounted owned by the PiLink
+# user; "flush" makes FAT write data out early, so a pulled stick loses less.
+ACTION=="add", SUBSYSTEMS=="usb", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="vfat", RUN+="/usr/bin/systemd-mount --no-block --collect --options=uid=@UID@,gid=@GID@,umask=0022,flush /dev/%k /mnt/flash"
+ACTION=="add", SUBSYSTEMS=="usb", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="exfat|ntfs|ntfs3", RUN+="/usr/bin/systemd-mount --no-block --collect --options=uid=@UID@,gid=@GID@,umask=0022 /dev/%k /mnt/flash"
+# ext4 and friends keep their own permissions: format the stick FAT/exFAT for PiLink.
+ACTION=="add", SUBSYSTEMS=="usb", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_FS_TYPE}=="ext2|ext3|ext4", RUN+="/usr/bin/systemd-mount --no-block --collect /dev/%k /mnt/flash"
+ACTION=="remove", SUBSYSTEMS=="usb", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", RUN+="/usr/bin/systemd-umount /mnt/flash"

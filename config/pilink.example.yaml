@@ -1,46 +1,32 @@
-# Copy this file to /etc/pilink.yaml and adjust values for your setup.
+# PiLink configuration. setup_pi.sh copies this to /etc/pilink.yaml.
+# After editing, check everything with:   pilink doctor
 
-ui:
-  theme: "blue"
-  log_lines: 200
+# The Windows PC(s) running FileZilla Server (or any FTP server).
+# The first entry is the one the screen UI uses.
+pc_endpoints:
+  - name: "office-pc"
+    host: "192.168.50.1"        # the PC's static IP on the direct cable
+    port: 21
+    username: "pilink"          # a user created in FileZilla Server
+    password: "change-me"
+    # FileZilla Server 1.x requires "explicit FTP over TLS" by default. Keep
+    # tls: true unless you switched that off in the server's settings.
+    tls: true
+    download_root: "/computer_share"   # PC folder copied onto the stick (Computer -> Flash)
+    upload_root: "/uploads"            # PC folder that receives files (Flash -> Computer);
+                                       # every transfer gets its own dated subfolder
+    timeout: 20
 
 paths:
-  staging_root: "/data"
-  pc_inbox: "/data/pc_inbox"
-  flash_outbox: "/data/flash_outbox"
+  staging_root: "/data"                # Pi-side working area, owned by the PiLink user
+  pc_inbox: "/data/pc_inbox"           # downloads from the PC, before they go to the stick
+  flash_outbox: "/data/flash_outbox"   # files from the stick, before they go to the PC
   log_dir: "/data/logs"
-  flash_mount: "/mnt/flash"
-  flash_transfer_root: "/mnt/flash/transfers"
-  retention_days: 7
-
-flash_drive:
-  min_required_gb: 8
-
-pc_endpoints:
-  - name: "default_pc"
-    host: "192.168.50.1"
-    port: 21
-    username: "pilink"
-    password: "change-me"
-    download_root: "/computer_share"   # remote path pulled to the Pi
-    upload_root: "/uploads"            # remote path where Pi pushes data
-
-pi_ftp:
-  host: "0.0.0.0"
-  port: 21
-  username: "piuser"
-  password: "change-me"
-  root: "/data/pi_ftp_root"
-
-usb_watcher:
-  enabled: true
-  debounce_seconds: 5
+  flash_mount: "/mnt/flash"            # Pi OS Lite: where PiLink's udev rule mounts the stick
+                                       # Pi OS with desktop: "auto" = wherever the desktop mounts it
+  flash_transfer_root: "/mnt/flash/transfers"   # Computer -> Flash copies land here, one dated folder each
+  retention_days: 7                    # staging copies older than this are deleted after a transfer
 
 logging:
   level: "INFO"
-  log_file: "/var/log/pilink.log"
-
-alerts:
-  enable_sound: false
-  enable_gpio_led: false
-
+  log_file: "/data/logs/pilink.log"
